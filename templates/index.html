@@ -82,21 +82,33 @@
     </table>
 
     <script>
-      let results = [];
+        let results = [];
+        const gameNumber = {{ game }}; // This will be replaced with the actual game number by Flask
+        const storageKey = `phraseGolfResults_${gameNumber}`;
 
-      document.getElementById('myForm').addEventListener('submit', function(e) {
+        // Load results from localStorage when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            const storedResults = localStorage.getItem(storageKey);
+            if (storedResults) {
+                results = JSON.parse(storedResults);
+                renderTable();
+            }
+        });
+
+        document.getElementById('myForm').addEventListener('submit', function(e) {
             e.preventDefault();
 
             const inputField = document.getElementById('textInput');
             const guess = inputField.value;
             if (guess.length == 0) return;
-            const url = `/game/{{ game }}/guess/${encodeURIComponent(encodeURIComponent(guess))}`;
+            const url = `/game/${gameNumber}/guess/${encodeURIComponent(encodeURIComponent(guess))}`;
 
             fetch(url)
             .then(response => response.json())
             .then(data => {
                 console.log('Success:', data);
                 results.unshift({ guess, result: parseFloat(data.similarity) });
+                localStorage.setItem(storageKey, JSON.stringify(results));
                 renderTable();
                 inputField.value = '';
             })
@@ -163,6 +175,7 @@
                 }
 
                 isAscending = !isAscending;
+                localStorage.setItem(storageKey, JSON.stringify(results));
                 renderTable();
             }))
         );
