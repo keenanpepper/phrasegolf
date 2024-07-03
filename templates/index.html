@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phrase Golf</title>
+    <style>
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        th, td {
+            border: 1px solid black;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+            cursor: pointer;
+        }
+        th:hover {
+            background-color: #ddd;
+        }
+        .sorted-asc::after {
+            content: " ▲";
+        }
+        .sorted-desc::after {
+            content: " ▼";
+        }
+    </style>
+</head>
+<body>
+    <h1>Phrase Golf</h1>
+    <p>Try to guess the hidden phrase. You may make as many guesses as you
+        wish, and for each guess you get a semantic similarity score. Similar
+        to <a href="https://semantle.com/">Semantle</a>.<br/>Phrase Golf by
+        Keenan Pepper</p>
+    <form id="myForm">
+        <input type="text" id="textInput" placeholder="Enter a phrase...">
+        <button type="submit">Guess</button>
+    </form>
+    <br/>
+    <table id="resultsTable">
+        <thead>
+            <tr>
+                <th data-sort="text">Guess</th>
+                <th data-sort="number">Similarity</th>
+            </tr>
+        </thead>
+        <tbody>
+        </tbody>
+    </table>
+
+    <script>
+      let results = [];
+
+      document.getElementById('myForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const inputField = document.getElementById('textInput');
+            const guess = inputField.value;
+            const url = `/game/1/guess/${encodeURIComponent(encodeURIComponent(guess))}`;
+
+            fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                console.log('Success:', data);
+                results.push({ guess, result: parseFloat(data.similarity) });
+                renderTable();
+                inputField.value = '';
+            })
+            .catch((error) => {
+                console.error('Error:', error);
+                results.push({ guess, result: 'Error' });
+                renderTable;
+            });
+        });
+
+        function renderTable() {
+            const tableBody = document.querySelector('#resultsTable tbody');
+            tableBody.innerHTML = '';
+            
+            results.forEach(({ guess, result }) => {
+                const newRow = tableBody.insertRow();
+                const cell1 = newRow.insertCell(0);
+                const cell2 = newRow.insertCell(1);
+                
+                cell1.textContent = guess;
+                cell2.textContent = result;
+            });
+        }
+
+        document.querySelectorAll('#resultsTable th').forEach(th => 
+            th.addEventListener('click', (() => {
+                const sortType = th.dataset.sort;
+                const columnIdx = Array.from(th.parentNode.children).indexOf(th);
+                let isAscending = th.classList.contains('sorted-asc');
+
+                // Remove sorted classes from all headers
+                document.querySelectorAll('#resultsTable th').forEach(header => {
+                    header.classList.remove('sorted-asc', 'sorted-desc');
+                });
+
+                // Sort the results array
+                results.sort((a, b) => {
+                    let valueA = Object.values(a)[columnIdx];
+                    let valueB = Object.values(b)[columnIdx];
+                    
+                    if (sortType === 'number') {
+                        valueA = parseFloat(valueA);
+                        valueB = parseFloat(valueB);
+                    }
+                    
+                    if (valueA < valueB) return isAscending ? -1 : 1;
+                    if (valueA > valueB) return isAscending ? 1 : -1;
+                    return 0;
+                });
+
+                // Toggle sort direction
+                if (isAscending) {
+                    th.classList.add('sorted-desc');
+                } else {
+                    th.classList.add('sorted-asc');
+                }
+
+                isAscending = !isAscending;
+                renderTable();
+            }))
+        );
+    </script>
+</body>
+</html>
