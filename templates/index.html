@@ -27,6 +27,26 @@
         .sorted-desc::after {
             content: " ▼";
         }
+        .form-container {
+            display: flex;
+            justify-content: center;
+            margin: 20px 0;
+        }
+
+        #myForm {
+            display: flex;
+            gap: 10px;
+        }
+
+        #textInput {
+            flex-grow: 1;
+            max-width: 300px;
+            font-size: 20px;
+        }
+
+        #myForm button {
+            font-size: 20px;
+        }
     </style>
 </head>
 <body>
@@ -38,14 +58,16 @@
     <h2>How to Play</h2>
     <ul>
         <li>Type a guess in the field and click submit.</li>
-        <li>A new row should appear in the table with a similarity score for your guess. The similarity scores range from about 0.7 to 1.0, so 0.7 means your guess is pretty much unrelated to the target, and 1.0 means you won! (0.9999999999999999 is the same as 1.0 and also means you won.)</li>
+        <li>A new row should appear in the table with a similarity score for your guess. A low similarity score (20% or less, including negative) means your word is basically unrelated. If your guess is correct it will be 100% similar.</li>
         <li>Keep guessing as many times as it takes.</li>
         <li>In order to see your top guesses, click the word "Similarity" to sort the table.</li>
     </ul>
-    <form id="myForm">
-        <input type="text" id="textInput" placeholder="Enter a phrase...">
-        <button type="submit">Guess</button>
-    </form>
+    <div class="form-container">
+        <form id="myForm">
+            <input type="text" id="textInput" placeholder="Enter a phrase...">
+            <button type="submit">Guess</button>
+        </form>
+    </div>
     <br/>
     <table id="resultsTable">
         <thead>
@@ -83,6 +105,14 @@
             });
         });
 
+        function temperatureWord(rawSimilarity) {
+            if (rawSimilarity < 0.77) return "Cold"
+            if (rawSimilarity < 0.82) return "Tepid"
+            if (rawSimilarity < 0.9) return "Warm"
+            if (rawSimilarity < 0.999999999999999) return "Hot"
+            return "Got it!"
+        }
+
         function renderTable() {
             const tableBody = document.querySelector('#resultsTable tbody');
             tableBody.innerHTML = '';
@@ -93,7 +123,8 @@
                 const cell2 = newRow.insertCell(1);
                 
                 cell1.textContent = guess;
-                cell2.textContent = result;
+                const percentageString = ((result - 0.7) / (1.0 - 0.7) * 100).toFixed(2) + '%';
+                cell2.textContent = percentageString + ' (' + temperatureWord(result) + ')';
             });
         }
 
