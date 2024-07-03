@@ -59,19 +59,19 @@
 
             const inputField = document.getElementById('textInput');
             const guess = inputField.value;
+            if (guess.length == 0) return;
             const url = `/game/1/guess/${encodeURIComponent(encodeURIComponent(guess))}`;
 
             fetch(url)
             .then(response => response.json())
             .then(data => {
                 console.log('Success:', data);
-                results.push({ guess, result: parseFloat(data.similarity) });
+                results.unshift({ guess, result: parseFloat(data.similarity) });
                 renderTable();
                 inputField.value = '';
             })
             .catch((error) => {
                 console.error('Error:', error);
-                results.push({ guess, result: 'Error' });
                 renderTable;
             });
         });
