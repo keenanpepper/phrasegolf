@@ -31,10 +31,17 @@
 </head>
 <body>
     <h1>Phrase Golf</h1>
+    <p>by Keenan Pepper (Buggy Alpha Version)</p>
     <p>Try to guess the hidden phrase. You may make as many guesses as you
-        wish, and for each guess you get a semantic similarity score. Similar
-        to <a href="https://semantle.com/">Semantle</a>.<br/>Phrase Golf by
-        Keenan Pepper</p>
+        wish, and for each guess you get a semantic similarity score.</p>
+    <p><strong>Game #{{ game }}: {{ letter_pattern }}</strong></p>
+    <h2>How to Play</h2>
+    <ul>
+        <li>Type a guess in the field and click submit.</li>
+        <li>A new row should appear in the table with a similarity score for your guess. The similarity scores range from about 0.7 to 1.0, so 0.7 means your guess is pretty much unrelated to the target, and 1.0 means you won! (0.9999999999999999 is the same as 1.0 and also means you won.)</li>
+        <li>Keep guessing as many times as it takes.</li>
+        <li>In order to see your top guesses, click the word "Similarity" to sort the table.</li>
+    </ul>
     <form id="myForm">
         <input type="text" id="textInput" placeholder="Enter a phrase...">
         <button type="submit">Guess</button>
@@ -60,7 +67,7 @@
             const inputField = document.getElementById('textInput');
             const guess = inputField.value;
             if (guess.length == 0) return;
-            const url = `/game/1/guess/${encodeURIComponent(encodeURIComponent(guess))}`;
+            const url = `/game/{{ game }}/guess/${encodeURIComponent(encodeURIComponent(guess))}`;
 
             fetch(url)
             .then(response => response.json())

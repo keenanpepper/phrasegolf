@@ -6,6 +6,7 @@ from llama_cpp import Llama
 import logging.handlers
 import numpy as np
 import pytz
+import re
 import urllib
 
 def setup_logging():
@@ -54,7 +55,7 @@ def load_targets():
 
 targets = load_targets()
 
-START_DATE = datetime.date(2024,7,1)
+START_DATE = datetime.date(2024,7,2)
 
 def get_game_num_for_today():
     now = datetime.datetime.now(pytz.timezone('US/Pacific'))
@@ -83,13 +84,18 @@ def similarity(game_num, guess):
     guess_embedding = embed(guess)
     return cosine_similarity(target_embedding, guess_embedding)
 
-# FIXME game 1 shouldn't be hardcoded in index.html
+def letter_pattern(game_num):
+    target = get_target_for_game_num(game_num)
+    return re.sub(r'\S', '□', target)
 
 application = Flask(__name__)
 
 @application.route('/')
 def index():
-    return render_template('index.html')
+    game = get_game_num_for_today()
+    return render_template('index.html',
+                           game=game,
+                           letter_pattern=letter_pattern(game))
 
 application.add_url_rule('/game/<game>/guess/<guess>', 'similarity',
                          (lambda game, guess:
