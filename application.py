@@ -8,6 +8,7 @@ import numpy as np
 import pytz
 import re
 import urllib
+import threading
 
 def setup_logging():
     # Create logger
@@ -39,8 +40,11 @@ LOCAL_FILENAME = hf_hub_download(repo_id=REPO_ID, filename=FILENAME_IN_REPO)
 
 model = Llama(model_path=LOCAL_FILENAME, embedding=True)
 
+model_lock = threading.Lock()
+
 def embed(text):
-    return model.embed("query: " + text)
+    with model_lock:
+        return model.embed("query: " + text)
 
 TARGETS_FILE = "targets.tsv"
 
