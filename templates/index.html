@@ -105,6 +105,10 @@
         let sessionMode = false;
         let sessionId = null;
         let pollingInterval = null;
+        
+        // Sort state tracking
+        let currentSortColumn = null;  // 0 for guess, 1 for similarity
+        let currentSortAscending = false;
 
         // Check if we're in session mode
         const urlParams = new URLSearchParams(window.location.search);
@@ -148,11 +152,8 @@
                 .then(response => response.json())
                 .then(data => {
                     console.log('Success:', data);
-                    // The polling will pick up the new guess, but we can immediately add it
-                    results.unshift({ guess, result: parseFloat(data.similarity) });
-                    renderTable();
                     inputField.value = '';
-                    // Immediately fetch to update (don't wait for next poll)
+                    // Immediately fetch to update with proper sorting (don't wait for next poll)
                     fetchSessionGuesses();
                 })
                 .catch((error) => {
@@ -199,40 +200,59 @@
             });
         }
 
+        function applySorting() {
+            if (currentSortColumn === null) return;
+            
+            const sortType = currentSortColumn === 1 ? 'number' : 'text';
+            
+            results.sort((a, b) => {
+                let valueA = Object.values(a)[currentSortColumn];
+                let valueB = Object.values(b)[currentSortColumn];
+                
+                if (sortType === 'number') {
+                    valueA = parseFloat(valueA);
+                    valueB = parseFloat(valueB);
+                }
+                
+                if (valueA < valueB) return currentSortAscending ? -1 : 1;
+                if (valueA > valueB) return currentSortAscending ? 1 : -1;
+                return 0;
+            });
+        }
+
+        function updateSortIndicators() {
+            // Remove sorted classes from all headers
+            document.querySelectorAll('#resultsTable th').forEach(header => {
+                header.classList.remove('sorted-asc', 'sorted-desc');
+            });
+            
+            // Add indicator to current sorted column
+            if (currentSortColumn !== null) {
+                const headers = document.querySelectorAll('#resultsTable th');
+                if (currentSortAscending) {
+                    headers[currentSortColumn].classList.add('sorted-asc');
+                } else {
+                    headers[currentSortColumn].classList.add('sorted-desc');
+                }
+            }
+        }
+
         document.querySelectorAll('#resultsTable th').forEach(th => 
             th.addEventListener('click', (() => {
-                const sortType = th.dataset.sort;
                 const columnIdx = Array.from(th.parentNode.children).indexOf(th);
-                let isAscending = th.classList.contains('sorted-asc');
-
-                // Remove sorted classes from all headers
-                document.querySelectorAll('#resultsTable th').forEach(header => {
-                    header.classList.remove('sorted-asc', 'sorted-desc');
-                });
-
-                // Sort the results array
-                results.sort((a, b) => {
-                    let valueA = Object.values(a)[columnIdx];
-                    let valueB = Object.values(b)[columnIdx];
-                    
-                    if (sortType === 'number') {
-                        valueA = parseFloat(valueA);
-                        valueB = parseFloat(valueB);
-                    }
-                    
-                    if (valueA < valueB) return isAscending ? -1 : 1;
-                    if (valueA > valueB) return isAscending ? 1 : -1;
-                    return 0;
-                });
-
-                // Toggle sort direction
-                if (isAscending) {
-                    th.classList.add('sorted-desc');
+                
+                // If clicking the same column, toggle direction
+                if (currentSortColumn === columnIdx) {
+                    currentSortAscending = !currentSortAscending;
                 } else {
-                    th.classList.add('sorted-asc');
+                    // New column, start with ascending
+                    currentSortColumn = columnIdx;
+                    currentSortAscending = false;
                 }
-
-                isAscending = !isAscending;
+                
+                applySorting();
+                updateSortIndicators();
+                
                 if (!sessionMode) {
                     localStorage.setItem(storageKey, JSON.stringify(results));
                 }
@@ -250,6 +270,9 @@
                 if (data.guesses) {
                     // Update results with session guesses
                     results = data.guesses.map(g => ({ guess: g.guess, result: g.similarity }));
+                    // Re-apply current sort if any
+                    applySorting();
+                    updateSortIndicators();
                     renderTable();
                 }
             })
