@@ -2,3 +2,4 @@ phrasegolf.zip
 .env
 .cursorindexingignore
 .specstory/
+__pycache__/
