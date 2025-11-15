@@ -1,2 +1,4 @@
 phrasegolf.zip
 .env
+.cursorindexingignore
+.specstory/
