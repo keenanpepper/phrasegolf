@@ -56,6 +56,21 @@
     <p>Try to guess the hidden phrase. You may make as many guesses as you
         wish, and for each guess you get a semantic similarity score.</p>
     <p><strong>Game #{{ game }}: {{ letter_pattern }}</strong></p>
+    <div id="sessionControls" style="margin: 20px 0; padding: 15px; background: #f0f0f0; border-radius: 5px;">
+        <div id="soloMode">
+            <button id="createSessionBtn" style="font-size: 18px; padding: 10px 20px; cursor: pointer;">🔗 Create Shared Game</button>
+            <p style="margin-top: 10px; font-size: 14px; color: #666;">Play solo, or create a shared game to play with others!</p>
+        </div>
+        <div id="sessionMode" style="display: none;">
+            <p style="margin: 0; font-size: 16px;">
+                <strong>🎮 Shared Game Mode</strong><br>
+                <span style="font-size: 14px;">Share this URL to play together:</span>
+            </p>
+            <input type="text" id="shareUrl" readonly style="width: 100%; max-width: 500px; padding: 5px; margin: 10px 0; font-family: monospace;">
+            <button id="copyUrlBtn" style="padding: 5px 15px; cursor: pointer;">📋 Copy Link</button>
+            <button id="leaveSessionBtn" style="padding: 5px 15px; cursor: pointer; margin-left: 10px;">❌ Leave Shared Game</button>
+        </div>
+    </div>
     <h2>How to Play</h2>
     <ul>
         <li>Type a guess in the field and click submit. The pattern of letters in today's phrase is {{ letter_pattern }}, but you don't have to limit your guesses to fit that — guess any word or phrase.</li>
@@ -85,13 +100,38 @@
         let results = [];
         const gameNumber = {{ game }}; // This will be replaced with the actual game number by Flask
         const storageKey = `phraseGolfResults_${gameNumber}`;
+        
+        // Session mode variables
+        let sessionMode = false;
+        let sessionId = null;
+        let pollingInterval = null;
+        
+        // Sort state tracking
+        let currentSortColumn = null;  // 0 for guess, 1 for similarity
+        let currentSortAscending = false;
 
-        // Load results from localStorage when the page loads
+        // Check if we're in session mode
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('session')) {
+            sessionMode = true;
+            sessionId = urlParams.get('session');
+            document.getElementById('soloMode').style.display = 'none';
+            document.getElementById('sessionMode').style.display = 'block';
+            document.getElementById('shareUrl').value = window.location.href;
+        }
+
+        // Load results from localStorage when the page loads (solo mode only)
         document.addEventListener('DOMContentLoaded', () => {
-            const storedResults = localStorage.getItem(storageKey);
-            if (storedResults) {
-                results = JSON.parse(storedResults);
-                renderTable();
+            if (!sessionMode) {
+                const storedResults = localStorage.getItem(storageKey);
+                if (storedResults) {
+                    results = JSON.parse(storedResults);
+                    renderTable();
+                }
+            } else {
+                // In session mode, fetch guesses immediately and start polling
+                fetchSessionGuesses();
+                pollingInterval = setInterval(fetchSessionGuesses, 2000);
             }
         });
 
@@ -101,21 +141,40 @@
             const inputField = document.getElementById('textInput');
             const guess = inputField.value;
             if (guess.length == 0) return;
-            const url = `/game/${gameNumber}/guess/${encodeURIComponent(encodeURIComponent(guess))}`;
-
-            fetch(url)
-            .then(response => response.json())
-            .then(data => {
-                console.log('Success:', data);
-                results.unshift({ guess, result: parseFloat(data.similarity) });
-                localStorage.setItem(storageKey, JSON.stringify(results));
-                renderTable();
-                inputField.value = '';
-            })
-            .catch((error) => {
-                console.error('Error:', error);
-                renderTable;
-            });
+            
+            if (sessionMode) {
+                // Session mode: POST to session endpoint
+                fetch(`/session/${sessionId}/guess`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ guess })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Success:', data);
+                    inputField.value = '';
+                    // Immediately fetch to update with proper sorting (don't wait for next poll)
+                    fetchSessionGuesses();
+                })
+                .catch((error) => {
+                    console.error('Error:', error);
+                });
+            } else {
+                // Solo mode: use original endpoint and localStorage
+                const url = `/game/${gameNumber}/guess/${encodeURIComponent(encodeURIComponent(guess))}`;
+                fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Success:', data);
+                    results.unshift({ guess, result: parseFloat(data.similarity) });
+                    localStorage.setItem(storageKey, JSON.stringify(results));
+                    renderTable();
+                    inputField.value = '';
+                })
+                .catch((error) => {
+                    console.error('Error:', error);
+                });
+            }
         });
 
         function temperatureWord(rawSimilarity) {
@@ -141,44 +200,138 @@
             });
         }
 
+        function applySorting() {
+            if (currentSortColumn === null) return;
+            
+            const sortType = currentSortColumn === 1 ? 'number' : 'text';
+            
+            results.sort((a, b) => {
+                let valueA = Object.values(a)[currentSortColumn];
+                let valueB = Object.values(b)[currentSortColumn];
+                
+                if (sortType === 'number') {
+                    valueA = parseFloat(valueA);
+                    valueB = parseFloat(valueB);
+                }
+                
+                if (valueA < valueB) return currentSortAscending ? -1 : 1;
+                if (valueA > valueB) return currentSortAscending ? 1 : -1;
+                return 0;
+            });
+        }
+
+        function updateSortIndicators() {
+            // Remove sorted classes from all headers
+            document.querySelectorAll('#resultsTable th').forEach(header => {
+                header.classList.remove('sorted-asc', 'sorted-desc');
+            });
+            
+            // Add indicator to current sorted column
+            if (currentSortColumn !== null) {
+                const headers = document.querySelectorAll('#resultsTable th');
+                if (currentSortAscending) {
+                    headers[currentSortColumn].classList.add('sorted-asc');
+                } else {
+                    headers[currentSortColumn].classList.add('sorted-desc');
+                }
+            }
+        }
+
         document.querySelectorAll('#resultsTable th').forEach(th => 
             th.addEventListener('click', (() => {
-                const sortType = th.dataset.sort;
                 const columnIdx = Array.from(th.parentNode.children).indexOf(th);
-                let isAscending = th.classList.contains('sorted-asc');
-
-                // Remove sorted classes from all headers
-                document.querySelectorAll('#resultsTable th').forEach(header => {
-                    header.classList.remove('sorted-asc', 'sorted-desc');
-                });
-
-                // Sort the results array
-                results.sort((a, b) => {
-                    let valueA = Object.values(a)[columnIdx];
-                    let valueB = Object.values(b)[columnIdx];
-                    
-                    if (sortType === 'number') {
-                        valueA = parseFloat(valueA);
-                        valueB = parseFloat(valueB);
-                    }
-                    
-                    if (valueA < valueB) return isAscending ? -1 : 1;
-                    if (valueA > valueB) return isAscending ? 1 : -1;
-                    return 0;
-                });
-
-                // Toggle sort direction
-                if (isAscending) {
-                    th.classList.add('sorted-desc');
+                
+                // If clicking the same column, toggle direction
+                if (currentSortColumn === columnIdx) {
+                    currentSortAscending = !currentSortAscending;
                 } else {
-                    th.classList.add('sorted-asc');
+                    // New column, start with ascending
+                    currentSortColumn = columnIdx;
+                    currentSortAscending = false;
                 }
-
-                isAscending = !isAscending;
-                localStorage.setItem(storageKey, JSON.stringify(results));
+                
+                applySorting();
+                updateSortIndicators();
+                
+                if (!sessionMode) {
+                    localStorage.setItem(storageKey, JSON.stringify(results));
+                }
                 renderTable();
             }))
         );
+
+        // Session management functions
+        function fetchSessionGuesses() {
+            if (!sessionMode || !sessionId) return;
+            
+            fetch(`/session/${sessionId}/guesses`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.guesses) {
+                    // Update results with session guesses
+                    results = data.guesses.map(g => ({ guess: g.guess, result: g.similarity }));
+                    // Re-apply current sort if any
+                    applySorting();
+                    updateSortIndicators();
+                    renderTable();
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching session guesses:', error);
+            });
+        }
+
+        function createSession() {
+            fetch('/session/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ game_num: gameNumber })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.session_id) {
+                    // Redirect to session URL
+                    window.location.href = `/?session=${data.session_id}`;
+                }
+            })
+            .catch(error => {
+                console.error('Error creating session:', error);
+                alert('Failed to create shared game. Please try again.');
+            });
+        }
+
+        function copyShareUrl() {
+            const shareUrlInput = document.getElementById('shareUrl');
+            shareUrlInput.select();
+            shareUrlInput.setSelectionRange(0, 99999); // For mobile devices
+            navigator.clipboard.writeText(shareUrlInput.value)
+                .then(() => {
+                    const copyBtn = document.getElementById('copyUrlBtn');
+                    const originalText = copyBtn.textContent;
+                    copyBtn.textContent = '✅ Copied!';
+                    setTimeout(() => {
+                        copyBtn.textContent = originalText;
+                    }, 2000);
+                })
+                .catch(err => {
+                    console.error('Failed to copy:', err);
+                    alert('Failed to copy URL. Please copy it manually.');
+                });
+        }
+
+        function leaveSession() {
+            if (confirm('Are you sure you want to leave the shared game? You\'ll return to solo mode.')) {
+                if (pollingInterval) {
+                    clearInterval(pollingInterval);
+                }
+                window.location.href = '/';
+            }
+        }
+
+        // Event listeners for session controls
+        document.getElementById('createSessionBtn').addEventListener('click', createSession);
+        document.getElementById('copyUrlBtn').addEventListener('click', copyShareUrl);
+        document.getElementById('leaveSessionBtn').addEventListener('click', leaveSession);
     </script>
 </body>
 </html>
