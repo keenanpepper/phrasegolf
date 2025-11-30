@@ -48,6 +48,12 @@
             font-size: 20px;
             cursor: pointer;
         }
+        
+        #hintButton {
+            font-size: 20px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
     </style>
 </head>
 <body>
@@ -68,6 +74,7 @@
             <input type="text" id="textInput" placeholder="Enter a phrase...">
             <button type="submit">Guess</button>
         </form>
+        <button id="hintButton">Get Hint</button>
     </div>
     <br/>
     <table id="resultsTable">
@@ -94,6 +101,12 @@
                 renderTable();
             }
         });
+        
+        // Get the best similarity score so far
+        function getBestSimilarity() {
+            if (results.length === 0) return -1.0; // No guesses yet
+            return Math.max(...results.map(r => r.result));
+        }
 
         document.getElementById('myForm').addEventListener('submit', function(e) {
             e.preventDefault();
@@ -115,6 +128,26 @@
             .catch((error) => {
                 console.error('Error:', error);
                 renderTable;
+            });
+        });
+        
+        document.getElementById('hintButton').addEventListener('click', function() {
+            const bestSimilarity = getBestSimilarity();
+            const url = `/game/${gameNumber}/hint/${bestSimilarity}`;
+            
+            fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                console.log('Hint received:', data);
+                if (data && data.phrase && data.similarity) {
+                    // Add hint to results as if it was guessed
+                    results.unshift({ guess: data.phrase + " (hint)", result: parseFloat(data.similarity) });
+                    localStorage.setItem(storageKey, JSON.stringify(results));
+                    renderTable();
+                }
+            })
+            .catch((error) => {
+                console.error('Error getting hint:', error);
             });
         });
 

@@ -9,6 +9,8 @@ import pytz
 import re
 import urllib
 import threading
+import json
+import os
 
 def setup_logging():
     # Create logger
@@ -59,6 +61,29 @@ def load_targets():
 
 targets = load_targets()
 
+# Load hint phrases (words + targets combined)
+def load_hint_phrases():
+    phrases = set()
+    
+    # Load words from google-10000-english-no-swears.txt
+    with open('google-10000-english-no-swears.txt', 'r') as f:
+        for line in f:
+            word = line.strip()
+            if word:
+                phrases.add(word)
+    
+    # Load targets
+    phrases.update(targets)
+    
+    return sorted(list(phrases))
+
+hint_phrases = load_hint_phrases()
+logger.info(f"Loaded {len(hint_phrases)} hint phrases")
+
+# Cache directory for pre-computed hints
+HINTS_CACHE_DIR = "hints_cache"
+os.makedirs(HINTS_CACHE_DIR, exist_ok=True)
+
 START_DATE = datetime.date(2024,7,2)
 
 def get_game_num_for_today():
@@ -92,6 +117,54 @@ def letter_pattern(game_num):
     target = get_target_for_game_num(game_num)
     return re.sub(r'\S', '□', target)
 
+def get_hints_cache_path(game_num):
+    return os.path.join(HINTS_CACHE_DIR, f"game_{game_num}.json")
+
+def get_or_compute_hints(game_num):
+    """Get pre-computed hints for a game, computing them if necessary."""
+    cache_path = get_hints_cache_path(game_num)
+    
+    # Check if cache exists
+    if os.path.exists(cache_path):
+        logger.info(f"Loading cached hints for game {game_num}")
+        with open(cache_path, 'r') as f:
+            return json.load(f)
+    
+    # Compute similarities for all hint phrases
+    logger.info(f"Computing hints for game {game_num} ({len(hint_phrases)} phrases)...")
+    target = get_target_for_game_num(game_num)
+    target_embedding = embed(target)
+    
+    hints = []
+    for i, phrase in enumerate(hint_phrases):
+        if i % 500 == 0:
+            logger.info(f"  Progress: {i}/{len(hint_phrases)}")
+        phrase_embedding = embed(phrase)
+        sim = cosine_similarity(target_embedding, phrase_embedding)
+        hints.append({"phrase": phrase, "similarity": float(sim)})
+    
+    # Sort by similarity (descending)
+    hints.sort(key=lambda x: x["similarity"], reverse=True)
+    
+    # Save to cache
+    logger.info(f"Saving hints cache for game {game_num}")
+    with open(cache_path, 'w') as f:
+        json.dump(hints, f)
+    
+    return hints
+
+def get_hint_better_than(game_num, best_similarity):
+    """Get a hint that's better than the user's best similarity."""
+    hints = get_or_compute_hints(game_num)
+    
+    # Find the first hint better than best_similarity
+    for hint in hints:
+        if hint["similarity"] > best_similarity:
+            return hint
+    
+    # If no hint is better, return the best one
+    return hints[0] if hints else None
+
 application = Flask(__name__)
 
 @application.route('/')
@@ -104,6 +177,10 @@ def index():
 application.add_url_rule('/game/<game>/guess/<guess>', 'similarity',
                          (lambda game, guess:
     {"similarity": similarity(game, urllib.parse.unquote(guess))}))
+
+application.add_url_rule('/game/<game>/hint/<best_similarity>', 'hint',
+                         (lambda game, best_similarity:
+    get_hint_better_than(int(game), float(best_similarity))))
 
 # run the app.
 if __name__ == "__main__":
