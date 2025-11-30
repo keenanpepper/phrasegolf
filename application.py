@@ -156,14 +156,19 @@ def get_or_compute_hints(game_num):
 def get_hint_better_than(game_num, best_similarity):
     """Get a hint that's better than the user's best similarity."""
     hints = get_or_compute_hints(game_num)
+    target = get_target_for_game_num(game_num)
     
-    # Find the first hint better than best_similarity
+    # Find the first hint better than best_similarity that isn't the answer
     for hint in hints:
-        if hint["similarity"] > best_similarity:
+        if hint["phrase"] != target and hint["similarity"] > best_similarity:
             return hint
     
-    # If no hint is better, return the best one
-    return hints[0] if hints else None
+    # If no hint is better (edge case), return the best non-answer hint
+    for hint in hints:
+        if hint["phrase"] != target:
+            return hint
+    
+    return None
 
 application = Flask(__name__)
 
